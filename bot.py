@@ -33,8 +33,8 @@ kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# ❌ ТЕКСТ БЕЗ ПІДПИСКИ
-NO_SUB_TEXT = """
+# ❌ ТЕКСТ БЕЗ ПІДПИСКИ (З МЕНЕДЖЕРОМ)
+NO_SUB_TEXT = f"""
 ❌ <b>ДОСТУП ОБМЕЖЕНО</b>
 
 Для використання бота необхідно оформити підписку 📊
@@ -43,6 +43,9 @@ NO_SUB_TEXT = """
 • 🚀 Торгові сигнали
 • 📈 Високу прохідність
 • 💰 Стабільний результат
+
+💬 <b>Усі питання до менеджера:</b>
+{MANAGER}
 """
 
 # 💱 ПАРИ
@@ -166,10 +169,6 @@ async def process_result(bot, chat_id, symbol, direction, start_price, exp):
     try:
         await asyncio.sleep(exp * 60)
 
-        end_price = get_price(symbol)
-        if end_price is None:
-            end_price = start_price + random.uniform(-0.5, 0.5)
-
         total = wins + losses
 
         if total < 10:
@@ -247,14 +246,10 @@ async def signal(message: Message):
 ⏰ {entry_time.strftime("%H:%M")} → {end_time.strftime("%H:%M")}
 """, parse_mode="HTML")
 
-        start_price = get_price(symbol)
-        if start_price is None:
-            start_price = random.uniform(1, 100)
-
         await message.answer("⏳ Очікуємо результат...")
 
         asyncio.create_task(
-            process_result(bot, message.chat.id, symbol, direction, start_price, exp)
+            process_result(bot, message.chat.id, symbol, direction, 0, exp)
         )
 
     finally:
@@ -283,13 +278,9 @@ async def stats(message: Message):
 📈 {winrate}%
 """, parse_mode="HTML")
 
-# 💬 МЕНЕДЖЕР
+# 💬 МЕНЕДЖЕР (ДОСТУПНИЙ ВСІМ)
 @dp.message(F.text == "💬 Менеджер")
 async def manager(message: Message):
-    if not await check_sub(message.from_user.id):
-        await message.answer(NO_SUB_TEXT, parse_mode="HTML")
-        return
-
     await message.answer(f"""
 💬 <b>Усі питання до менеджера</b>
 
@@ -303,4 +294,6 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+
 
