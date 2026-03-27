@@ -14,7 +14,6 @@ TOKEN = "8593052757:AAGt1P-IZuHz2hxYpfMoxSNZmnfLDDUlux0"
 CHANNEL = -1003468351423
 MANAGER = "@managfam"
 
-
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
@@ -33,6 +32,18 @@ kb = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True
 )
+
+# ❌ ТЕКСТ БЕЗ ПІДПИСКИ
+NO_SUB_TEXT = """
+❌ <b>ДОСТУП ОБМЕЖЕНО</b>
+
+Для використання бота необхідно оформити підписку 📊
+
+🔒 Після підписки ти отримаєш:
+• 🚀 Торгові сигнали
+• 📈 Високу прохідність
+• 💰 Стабільний результат
+"""
 
 # 💱 ПАРИ
 PAIRS = {
@@ -144,16 +155,13 @@ def analyze_market():
         return pair_name, symbol, direction
 
     signals = sorted(signals, key=lambda x: x[3], reverse=True)
-
     pair_name, symbol, direction, _ = random.choice(signals[:5])
 
     return pair_name, symbol, direction
 
-# 🔔 ФОН РЕЗУЛЬТАТУ (ВИПРАВЛЕНО)
+# 🔔 РЕЗУЛЬТАТ
 async def process_result(bot, chat_id, symbol, direction, start_price, exp):
     global wins, losses
-
-    print("RESULT TASK STARTED")
 
     try:
         await asyncio.sleep(exp * 60)
@@ -168,7 +176,6 @@ async def process_result(bot, chat_id, symbol, direction, start_price, exp):
             win = random.random() < 0.9
         else:
             current_winrate = wins / total
-
             if current_winrate < TARGET_WINRATE:
                 win = random.random() < 0.9
             else:
@@ -194,7 +201,7 @@ async def process_result(bot, chat_id, symbol, direction, start_price, exp):
 @dp.message(Command("start"))
 async def start(message: Message):
     if not await check_sub(message.from_user.id):
-        await message.answer(f"📩 Менеджер: {MANAGER}")
+        await message.answer(NO_SUB_TEXT, parse_mode="HTML")
         return
 
     await message.answer("""
@@ -206,6 +213,10 @@ async def start(message: Message):
 # 📊 СИГНАЛ
 @dp.message(F.text == "📊 Отримати сигнал")
 async def signal(message: Message):
+    if not await check_sub(message.from_user.id):
+        await message.answer(NO_SUB_TEXT, parse_mode="HTML")
+        return
+
     user_id = message.from_user.id
 
     if user_id in active_users:
@@ -242,7 +253,6 @@ async def signal(message: Message):
 
         await message.answer("⏳ Очікуємо результат...")
 
-        # 🔥 ФОН
         asyncio.create_task(
             process_result(bot, message.chat.id, symbol, direction, start_price, exp)
         )
@@ -253,6 +263,10 @@ async def signal(message: Message):
 # 📈 СТАТИСТИКА
 @dp.message(F.text == "📈 Статистика")
 async def stats(message: Message):
+    if not await check_sub(message.from_user.id):
+        await message.answer(NO_SUB_TEXT, parse_mode="HTML")
+        return
+
     total = wins + losses
 
     if total == 0:
@@ -272,14 +286,15 @@ async def stats(message: Message):
 # 💬 МЕНЕДЖЕР
 @dp.message(F.text == "💬 Менеджер")
 async def manager(message: Message):
-    await message.answer(f"❌ ДОСТУП ОБМЕЖЕНО
+    if not await check_sub(message.from_user.id):
+        await message.answer(NO_SUB_TEXT, parse_mode="HTML")
+        return
 
-Для використання бота необхідно оформити підписку 📊
+    await message.answer(f"""
+💬 <b>Усі питання до менеджера</b>
 
-🔒 Після підписки ти отримаєш:
-• 🚀 Торгові сигнали
-• 📈 Високу прохідність
-• 💰 Стабільний результат {MANAGER}")
+📩 {MANAGER}
+""", parse_mode="HTML")
 
 # ▶️ ЗАПУСК
 async def main():
