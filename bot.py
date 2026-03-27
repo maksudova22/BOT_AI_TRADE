@@ -272,7 +272,14 @@ async def stats(message: Message):
 # 💬 МЕНЕДЖЕР
 @dp.message(F.text == "💬 Менеджер")
 async def manager(message: Message):
-    await message.answer(f"📩 {MANAGER}")
+    await message.answer(f"❌ ДОСТУП ОБМЕЖЕНО
+
+Для використання бота необхідно оформити підписку 📊
+
+🔒 Після підписки ти отримаєш:
+• 🚀 Торгові сигнали
+• 📈 Високу прохідність
+• 💰 Стабільний результат {MANAGER}")
 
 # ▶️ ЗАПУСК
 async def main():
