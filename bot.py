@@ -149,9 +149,11 @@ def analyze_market():
 
     return pair_name, symbol, direction
 
-# 🔔 НОВА ФУНКЦІЯ РЕЗУЛЬТАТУ
-async def process_result(message: Message, symbol, direction, start_price, exp):
+# 🔔 ФОН РЕЗУЛЬТАТУ (ВИПРАВЛЕНО)
+async def process_result(bot, chat_id, symbol, direction, start_price, exp):
     global wins, losses
+
+    print("RESULT TASK STARTED")
 
     try:
         await asyncio.sleep(exp * 60)
@@ -182,7 +184,7 @@ async def process_result(message: Message, symbol, direction, start_price, exp):
         losses += 1
         result_text = "❌ <b>LOSE</b>"
 
-    await message.answer(f"""
+    await bot.send_message(chat_id, f"""
 📊 <b>РЕЗУЛЬТАТ СИГНАЛУ</b>
 
 {result_text}
@@ -240,9 +242,9 @@ async def signal(message: Message):
 
         await message.answer("⏳ Очікуємо результат...")
 
-        # 🔥 ЗАПУСК ФОНУ
+        # 🔥 ФОН
         asyncio.create_task(
-            process_result(message, symbol, direction, start_price, exp)
+            process_result(bot, message.chat.id, symbol, direction, start_price, exp)
         )
 
     finally:
@@ -279,3 +281,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
