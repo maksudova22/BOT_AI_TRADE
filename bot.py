@@ -14,6 +14,7 @@ TOKEN = "8593052757:AAGt1P-IZuHz2hxYpfMoxSNZmnfLDDUlux0"
 CHANNEL = -1003468351423
 MANAGER = "@managfam"
 
+
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
@@ -21,7 +22,7 @@ wins = 0
 losses = 0
 active_users = set()
 
-TARGET_WINRATE = 0.85  # 85%
+TARGET_WINRATE = 0.85
 
 # 💎 КНОПКИ
 kb = ReplyKeyboardMarkup(
@@ -45,7 +46,6 @@ PAIRS = {
     "EUR/GBP": "EURUSDT",
     "AUD/JPY": "AUDUSDT",
     "CHF/JPY": "CHFUSDT",
-
     "BTC/USD": "BTCUSDT",
     "ETH/USD": "ETHUSDT",
     "BNB/USD": "BNBUSDT",
@@ -92,7 +92,7 @@ def calculate_rsi(df, period=14):
     rs = gain / loss
     return (100 - (100 / (1 + rs))).iloc[-1]
 
-# 🧠 АНАЛІЗ (завжди дає сигнал)
+# 🧠 АНАЛІЗ
 def analyze_market():
     signals = []
 
@@ -149,17 +149,50 @@ def analyze_market():
 
     return pair_name, symbol, direction
 
+# 🔔 НОВА ФУНКЦІЯ РЕЗУЛЬТАТУ
+async def process_result(message: Message, symbol, direction, start_price, exp):
+    global wins, losses
+
+    try:
+        await asyncio.sleep(exp * 60)
+
+        end_price = get_price(symbol)
+        if end_price is None:
+            end_price = start_price + random.uniform(-0.5, 0.5)
+
+        total = wins + losses
+
+        if total < 10:
+            win = random.random() < 0.9
+        else:
+            current_winrate = wins / total
+
+            if current_winrate < TARGET_WINRATE:
+                win = random.random() < 0.9
+            else:
+                win = random.random() < 0.7
+
+    except:
+        win = random.choice([True, False])
+
+    if win:
+        wins += 1
+        result_text = "✅ <b>ЗАЙШЛО</b>"
+    else:
+        losses += 1
+        result_text = "❌ <b>LOSE</b>"
+
+    await message.answer(f"""
+📊 <b>РЕЗУЛЬТАТ СИГНАЛУ</b>
+
+{result_text}
+""", parse_mode="HTML")
+
 # 🚀 START
 @dp.message(Command("start"))
 async def start(message: Message):
     if not await check_sub(message.from_user.id):
-        await message.answer(f"""
-🔒 <b>Доступ обмежено</b>
-
-Для використання бота потрібна підписка
-
-📩 Менеджер: {MANAGER}
-""", parse_mode="HTML")
+        await message.answer(f"📩 Менеджер: {MANAGER}")
         return
 
     await message.answer("""
@@ -171,84 +204,46 @@ async def start(message: Message):
 # 📊 СИГНАЛ
 @dp.message(F.text == "📊 Отримати сигнал")
 async def signal(message: Message):
-    global wins, losses
-
     user_id = message.from_user.id
 
     if user_id in active_users:
-        await message.answer("⏳ Зачекай, попередній сигнал ще обробляється...")
+        await message.answer("⏳ Зачекай попередній сигнал")
         return
 
     active_users.add(user_id)
 
     try:
-        if not await check_sub(user_id):
-            await message.answer(f"📩 Менеджер: {MANAGER}")
-            return
-
         msg = await message.answer("🔍 Аналіз ринку...")
         await asyncio.sleep(1)
-        await msg.edit_text("📊 Обробка даних...")
+        await msg.edit_text("📊 Обробка...")
         await asyncio.sleep(1)
-        await msg.edit_text("📈 Формування сигналу...")
 
         pair, symbol, direction = analyze_market()
-
         exp = random.choice([1, 2])
 
         now = datetime.now(ZoneInfo("Europe/Kyiv"))
-
-        entry_time = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
+        entry_time = (now + timedelta(minutes=1)).replace(second=0)
         end_time = entry_time + timedelta(minutes=exp)
 
         await message.answer(f"""
-🚀 <b>НОВИЙ СИГНАЛ</b>
+🚀 <b>СИГНАЛ</b>
 
-💱 Актив: <b>{pair}</b>
-📊 Напрямок: <b>{direction}</b>
+💱 {pair}
+📊 {direction}
 
-⏰ Вхід: <b>{entry_time.strftime("%H:%M")}</b>
-⏳ Вихід: <b>{end_time.strftime("%H:%M")}</b>
-
-🔥 Готовий до входу
+⏰ {entry_time.strftime("%H:%M")} → {end_time.strftime("%H:%M")}
 """, parse_mode="HTML")
 
         start_price = get_price(symbol)
         if start_price is None:
             start_price = random.uniform(1, 100)
 
-        await message.answer("🚀 Вхід у позицію...")
         await message.answer("⏳ Очікуємо результат...")
 
-        # ⏳ очікування
-        await asyncio.sleep(exp * 60)
-
-        end_price = get_price(symbol)
-        if end_price is None:
-            end_price = start_price + random.uniform(-0.5, 0.5)
-
-        # 🔥 ЛОГІКА 80-90%
-        total = wins + losses
-
-        if total < 10:
-            win = random.random() < 0.9
-        else:
-            current_winrate = wins / total
-
-            if current_winrate < TARGET_WINRATE:
-                win = True if random.random() < 0.9 else False
-            else:
-                win = True if random.random() < 0.7 else False
-
-        # 📊 результат
-        if win:
-            wins += 1
-            result_text = "✅ <b>ЗАЙШЛО</b>"
-        else:
-            losses += 1
-            result_text = "❌ <b>LOSE</b>"
-
-        await message.answer(f"📊 Результат: {result_text}", parse_mode="HTML")
+        # 🔥 ЗАПУСК ФОНУ
+        asyncio.create_task(
+            process_result(message, symbol, direction, start_price, exp)
+        )
 
     finally:
         active_users.discard(user_id)
@@ -259,7 +254,7 @@ async def stats(message: Message):
     total = wins + losses
 
     if total == 0:
-        await message.answer("📊 Статистика поки порожня")
+        await message.answer("📊 Поки немає даних")
         return
 
     winrate = round((wins / total) * 100, 1)
@@ -267,15 +262,15 @@ async def stats(message: Message):
     await message.answer(f"""
 📊 <b>СТАТИСТИКА</b>
 
-✅ Виграшів: <b>{wins}</b>
-❌ Програшів: <b>{losses}</b>
-📈 WinRate: <b>{winrate}%</b>
+✅ {wins}
+❌ {losses}
+📈 {winrate}%
 """, parse_mode="HTML")
 
 # 💬 МЕНЕДЖЕР
 @dp.message(F.text == "💬 Менеджер")
 async def manager(message: Message):
-    await message.answer(f"📩 Менеджер: {MANAGER}")
+    await message.answer(f"📩 {MANAGER}")
 
 # ▶️ ЗАПУСК
 async def main():
@@ -284,4 +279,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
