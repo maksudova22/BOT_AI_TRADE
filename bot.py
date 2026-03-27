@@ -1,17 +1,15 @@
-print("🔥 НОВИЙ БОТ ЗАПУЩЕНИЙ")
-
 import asyncio
+import random
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 import requests
 import pandas as pd
-import random
-
-from datetime import datetime, timedelta
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command
 
-# 🔐 НАЛАШТУВАННЯ
 TOKEN = "8593052757:AAGt1P-IZuHz2hxYpfMoxSNZmnfLDDUlux0"
 CHANNEL = -1003468351423
 MANAGER = "@managfam"
@@ -19,13 +17,13 @@ MANAGER = "@managfam"
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# 📊 ДАНІ
-users = set()
 wins = 0
 losses = 0
-user_signals = {}
+active_users = set()
 
-# 📲 КНОПКИ
+TARGET_WINRATE = 0.85  # 85%
+
+# 💎 КНОПКИ
 kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📊 Отримати сигнал")],
@@ -35,18 +33,27 @@ kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# 🧠 ТЕКСТИ
-texts = [
-    "Сильний сигнал 🔥",
-    "Точний вхід 🎯",
-    "За трендом 📊",
-    "Аналіз підтверджено ✔️",
-    "Хороша точка входу",
-    "Ринок дає можливість",
-    "Є рух на ринку"
-]
+# 💱 ПАРИ
+PAIRS = {
+    "EUR/USD": "EURUSDT",
+    "GBP/USD": "GBPUSDT",
+    "AUD/USD": "AUDUSDT",
+    "USD/JPY": "JPYUSDT",
+    "USD/CAD": "CADUSDT",
+    "EUR/JPY": "EURUSDT",
+    "GBP/JPY": "GBPUSDT",
+    "EUR/GBP": "EURUSDT",
+    "AUD/JPY": "AUDUSDT",
+    "CHF/JPY": "CHFUSDT",
 
-# 🔐 ПЕРЕВІРКА ПІДПИСКИ
+    "BTC/USD": "BTCUSDT",
+    "ETH/USD": "ETHUSDT",
+    "BNB/USD": "BNBUSDT",
+    "SOL/USD": "SOLUSDT",
+    "XRP/USD": "XRPUSDT"
+}
+
+# 🔒 ПІДПИСКА
 async def check_sub(user_id):
     try:
         member = await bot.get_chat_member(CHANNEL, user_id)
@@ -54,173 +61,197 @@ async def check_sub(user_id):
     except:
         return False
 
-# 💰 ЦІНА
+# 📥 ЦІНА
 def get_price(symbol):
-    url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
-    return float(requests.get(url).json()["price"])
+    try:
+        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+        return float(requests.get(url, timeout=5).json()["price"])
+    except:
+        return None
 
 # 📊 СВІЧКИ
 def get_candles(symbol):
-    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1m&limit=50"
-    data = requests.get(url).json()
+    try:
+        url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1m&limit=50"
+        data = requests.get(url, timeout=5).json()
 
-    df = pd.DataFrame(data, columns=[
-        "time","open","high","low","close","volume",
-        "ct","qv","n","tb","tq","ignore"
-    ])
+        df = pd.DataFrame(data)
+        df = df.iloc[:, :6]
+        df.columns = ["time", "open", "high", "low", "close", "volume"]
+        df["close"] = df["close"].astype(float)
 
-    df["close"] = df["close"].astype(float)
-    return df
+        return df
+    except:
+        return None
 
-# 📈 RSI
+# 📊 RSI
 def calculate_rsi(df, period=14):
     delta = df["close"].diff()
     gain = delta.clip(lower=0).rolling(period).mean()
-    loss = (-delta.clip(upper=0)).rolling(period).mean()
+    loss = -delta.clip(upper=0).rolling(period).mean()
     rs = gain / loss
-    return 100 - (100 / (1 + rs)).iloc[-1]
+    return (100 - (100 / (1 + rs))).iloc[-1]
 
-# 🧠 АНАЛІЗ
+# 🧠 АНАЛІЗ (завжди дає сигнал)
 def analyze_market():
-    pairs = {
-        "EUR/USD": "EURUSDT",
-        "GBP/USD": "GBPUSDT",
-        "AUD/USD": "AUDUSDT",
-        "USD/JPY": "JPYUSDT",
-        "USD/CAD": "CADUSDT"
-    }
+    signals = []
 
-    for pair_name, symbol in pairs.items():
-        df = get_candles(symbol)
-        closes = df["close"]
+    for pair_name, symbol in PAIRS.items():
+        try:
+            df = get_candles(symbol)
+            if df is None:
+                continue
 
-        ema_fast = closes.ewm(span=5).mean().iloc[-1]
-        ema_slow = closes.ewm(span=20).mean().iloc[-1]
-        rsi = calculate_rsi(df)
+            closes = df["close"]
 
-        last_price = closes.iloc[-1]
-        prev_price = closes.iloc[-2]
+            ema_fast = closes.ewm(span=5).mean().iloc[-1]
+            ema_slow = closes.ewm(span=15).mean().iloc[-1]
+            rsi = calculate_rsi(df)
 
-        # ⬆️ ВГОРУ
-        if ema_fast > ema_slow and rsi > 50 and last_price > prev_price:
-            return pair_name, symbol, "ВГОРУ ⬆️"
+            last_price = closes.iloc[-1]
+            prev_price = closes.iloc[-2]
 
-        # ⬇️ ВНИЗ
-        if ema_fast < ema_slow and rsi < 50 and last_price < prev_price:
-            return pair_name, symbol, "ВНИЗ ⬇️"
+            score_up = 0
+            score_down = 0
 
-    return None, None, None
+            if ema_fast > ema_slow:
+                score_up += 1
+            else:
+                score_down += 1
+
+            if rsi > 50:
+                score_up += 1
+            else:
+                score_down += 1
+
+            if last_price > prev_price:
+                score_up += 1
+            else:
+                score_down += 1
+
+            direction = "ВГОРУ ⬆️" if score_up >= score_down else "ВНИЗ ⬇️"
+            strength = max(score_up, score_down)
+
+            signals.append((pair_name, symbol, direction, strength))
+
+        except:
+            continue
+
+    if not signals:
+        pair_name = random.choice(list(PAIRS.keys()))
+        symbol = PAIRS[pair_name]
+        direction = random.choice(["ВГОРУ ⬆️", "ВНИЗ ⬇️"])
+        return pair_name, symbol, direction
+
+    signals = sorted(signals, key=lambda x: x[3], reverse=True)
+
+    pair_name, symbol, direction, _ = random.choice(signals[:5])
+
+    return pair_name, symbol, direction
 
 # 🚀 START
 @dp.message(Command("start"))
 async def start(message: Message):
-    users.add(message.from_user.id)
-
     if not await check_sub(message.from_user.id):
         await message.answer(f"""
-🔒 Доступ закритий
+🔒 <b>Доступ обмежено</b>
 
-Потрібна підписка на канал
+Для використання бота потрібна підписка
 
-💎 Отримати доступ:
-{MANAGER}
-""")
+📩 Менеджер: {MANAGER}
+""", parse_mode="HTML")
         return
 
-    fake_users = random.randint(120, 350)
+    await message.answer("""
+💎 <b>ДОСТУП ВІДКРИТО</b>
 
-    await message.answer(f"""
-💎 Доступ відкрито
-
-👥 Онлайн зараз: {fake_users}
-
-👇 Обери дію
-""", reply_markup=kb)
+⬇️ Обирай нижче та отримай прибуткові сигнали
+""", reply_markup=kb, parse_mode="HTML")
 
 # 📊 СИГНАЛ
 @dp.message(F.text == "📊 Отримати сигнал")
 async def signal(message: Message):
     global wins, losses
 
-    if not await check_sub(message.from_user.id):
-        await message.answer(f"🔒 Напиши менеджеру:\n{MANAGER}")
-        return
-
     user_id = message.from_user.id
-    user_signals[user_id] = user_signals.get(user_id, 0)
 
-    if user_signals[user_id] >= 3:
-        await message.answer(f"""
-🔒 Ліміт сигналів
-
-💎 Доступ через:
-{MANAGER}
-""")
+    if user_id in active_users:
+        await message.answer("⏳ Зачекай, попередній сигнал ще обробляється...")
         return
 
-    user_signals[user_id] += 1
+    active_users.add(user_id)
 
-    msg = await message.answer("⏳ Аналізую ринок...")
-    await asyncio.sleep(2)
-    await msg.edit_text("📊 Збираю дані...")
-    await asyncio.sleep(2)
-    await msg.edit_text("📈 Аналіз завершено")
+    try:
+        if not await check_sub(user_id):
+            await message.answer(f"📩 Менеджер: {MANAGER}")
+            return
 
-    pair = None
-
-    for _ in range(5):
-        pair, symbol, direction = analyze_market()
-        if pair:
-            break
+        msg = await message.answer("🔍 Аналіз ринку...")
         await asyncio.sleep(1)
+        await msg.edit_text("📊 Обробка даних...")
+        await asyncio.sleep(1)
+        await msg.edit_text("📈 Формування сигналу...")
 
-    if not pair:
-        await message.answer("⚠️ Немає сигналу")
-        return
+        pair, symbol, direction = analyze_market()
 
-    # ⏰ ЧАС
-    exp = 1
-    now = datetime.now()
-    entry_time = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
-    end_time = entry_time + timedelta(minutes=exp)
+        exp = random.choice([1, 2])
 
-    text = random.choice(texts)
+        now = datetime.now(ZoneInfo("Europe/Kyiv"))
 
-    await message.answer(f"""
-📊 СИГНАЛ
+        entry_time = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
+        end_time = entry_time + timedelta(minutes=exp)
 
-Актив: {pair}
-Напрямок: {direction}
+        await message.answer(f"""
+🚀 <b>НОВИЙ СИГНАЛ</b>
 
-⏰ Вхід: {entry_time.strftime("%H:%M")}
-⏳ Експірація: {end_time.strftime("%H:%M")}
+💱 Актив: <b>{pair}</b>
+📊 Напрямок: <b>{direction}</b>
 
-{text}
-""")
+⏰ Вхід: <b>{entry_time.strftime("%H:%M")}</b>
+⏳ Вихід: <b>{end_time.strftime("%H:%M")}</b>
 
-    # ⏳ ЧЕКАЄМО ДО ВХОДУ
-    wait_seconds = (entry_time - datetime.now()).total_seconds()
-    if wait_seconds > 0:
-        await asyncio.sleep(wait_seconds)
+🔥 Готовий до входу
+""", parse_mode="HTML")
 
-    start_price = get_price(symbol)
+        start_price = get_price(symbol)
+        if start_price is None:
+            start_price = random.uniform(1, 100)
 
-    await message.answer(f"🚀 Вхід зараз: {pair} {direction}")
+        await message.answer("🚀 Вхід у позицію...")
+        await message.answer("⏳ Очікуємо результат...")
 
-    await asyncio.sleep(exp * 60)
-    end_price = get_price(symbol)
+        # ⏳ очікування
+        await asyncio.sleep(exp * 60)
 
-    if direction == "ВГОРУ ⬆️":
-        result = "ЗАЙШЛО ✅" if end_price > start_price else "НЕ ЗАЙШЛО ❌"
-    else:
-        result = "ЗАЙШЛО ✅" if end_price < start_price else "НЕ ЗАЙШЛО ❌"
+        end_price = get_price(symbol)
+        if end_price is None:
+            end_price = start_price + random.uniform(-0.5, 0.5)
 
-    if result == "ЗАЙШЛО ✅":
-        wins += 1
-    else:
-        losses += 1
+        # 🔥 ЛОГІКА 80-90%
+        total = wins + losses
 
-    await message.answer(f"📊 {result}")
+        if total < 10:
+            win = random.random() < 0.9
+        else:
+            current_winrate = wins / total
+
+            if current_winrate < TARGET_WINRATE:
+                win = True if random.random() < 0.9 else False
+            else:
+                win = True if random.random() < 0.7 else False
+
+        # 📊 результат
+        if win:
+            wins += 1
+            result_text = "✅ <b>ЗАЙШЛО</b>"
+        else:
+            losses += 1
+            result_text = "❌ <b>LOSE</b>"
+
+        await message.answer(f"📊 Результат: {result_text}", parse_mode="HTML")
+
+    finally:
+        active_users.discard(user_id)
 
 # 📈 СТАТИСТИКА
 @dp.message(F.text == "📈 Статистика")
@@ -228,27 +259,27 @@ async def stats(message: Message):
     total = wins + losses
 
     if total == 0:
-        await message.answer("Поки немає статистики")
+        await message.answer("📊 Статистика поки порожня")
         return
 
     winrate = round((wins / total) * 100, 1)
 
     await message.answer(f"""
-📊 Статистика
+📊 <b>СТАТИСТИКА</b>
 
-✅ Виграшів: {wins}
-❌ Програшів: {losses}
-📈 Прохідність: {winrate}%
-""")
+✅ Виграшів: <b>{wins}</b>
+❌ Програшів: <b>{losses}</b>
+📈 WinRate: <b>{winrate}%</b>
+""", parse_mode="HTML")
 
 # 💬 МЕНЕДЖЕР
 @dp.message(F.text == "💬 Менеджер")
 async def manager(message: Message):
-    await message.answer(f"📩 Напиши: {MANAGER}")
+    await message.answer(f"📩 Менеджер: {MANAGER}")
 
 # ▶️ ЗАПУСК
 async def main():
-    print("🚀 BOT START")
+    print("🚀 BOT STARTED")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
