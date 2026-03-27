@@ -7,7 +7,13 @@ import requests
 import pandas as pd
 
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import (
+    Message,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton
+)
 from aiogram.filters import Command
 
 TOKEN = "8593052757:AAGt1P-IZuHz2hxYpfMoxSNZmnfLDDUlux0"
@@ -33,8 +39,18 @@ kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# ❌ ТЕКСТ БЕЗ ПІДПИСКИ (З МЕНЕДЖЕРОМ)
-NO_SUB_TEXT = f"""
+# 💬 КНОПКА МЕНЕДЖЕРА
+manager_kb = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(
+            text="💬 Написати менеджеру",
+            url=f"https://t.me/{MANAGER.replace('@','')}"
+        )]
+    ]
+)
+
+# ❌ ТЕКСТ БЕЗ ПІДПИСКИ
+NO_SUB_TEXT = """
 ❌ <b>ДОСТУП ОБМЕЖЕНО</b>
 
 Для використання бота необхідно оформити підписку 📊
@@ -43,9 +59,6 @@ NO_SUB_TEXT = f"""
 • 🚀 Торгові сигнали
 • 📈 Високу прохідність
 • 💰 Стабільний результат
-
-💬 <b>Усі питання до менеджера:</b>
-{MANAGER}
 """
 
 # 💱 ПАРИ
@@ -200,7 +213,7 @@ async def process_result(bot, chat_id, symbol, direction, start_price, exp):
 @dp.message(Command("start"))
 async def start(message: Message):
     if not await check_sub(message.from_user.id):
-        await message.answer(NO_SUB_TEXT, parse_mode="HTML")
+        await message.answer(NO_SUB_TEXT, parse_mode="HTML", reply_markup=manager_kb)
         return
 
     await message.answer("""
@@ -213,7 +226,7 @@ async def start(message: Message):
 @dp.message(F.text == "📊 Отримати сигнал")
 async def signal(message: Message):
     if not await check_sub(message.from_user.id):
-        await message.answer(NO_SUB_TEXT, parse_mode="HTML")
+        await message.answer(NO_SUB_TEXT, parse_mode="HTML", reply_markup=manager_kb)
         return
 
     user_id = message.from_user.id
@@ -259,7 +272,7 @@ async def signal(message: Message):
 @dp.message(F.text == "📈 Статистика")
 async def stats(message: Message):
     if not await check_sub(message.from_user.id):
-        await message.answer(NO_SUB_TEXT, parse_mode="HTML")
+        await message.answer(NO_SUB_TEXT, parse_mode="HTML", reply_markup=manager_kb)
         return
 
     total = wins + losses
@@ -278,14 +291,12 @@ async def stats(message: Message):
 📈 {winrate}%
 """, parse_mode="HTML")
 
-# 💬 МЕНЕДЖЕР (ДОСТУПНИЙ ВСІМ)
+# 💬 МЕНЕДЖЕР
 @dp.message(F.text == "💬 Менеджер")
 async def manager(message: Message):
-    await message.answer(f"""
+    await message.answer("""
 💬 <b>Усі питання до менеджера</b>
-
-📩 {MANAGER}
-""", parse_mode="HTML")
+""", parse_mode="HTML", reply_markup=manager_kb)
 
 # ▶️ ЗАПУСК
 async def main():
@@ -294,6 +305,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-
 
